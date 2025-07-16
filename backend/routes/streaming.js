@@ -1,17 +1,15 @@
 const express = require('express');
 const db = require('../config/database');
 const authMiddleware = require('../middlewares/authMiddleware');
-const { WowzaStreamingService } = require('../config/WowzaStreamingService');
-
+const WowzaStreamingService = require('../config/WowzaStreamingService'); // ajuste aqui se for CommonJS
 const router = express.Router();
 const wowzaService = new WowzaStreamingService();
 
-// GET /api/streaming/status - Verifica status da transmissão
+// --- ROTA GET /status ---
 router.get('/status', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Buscar transmissão ativa
     const [transmissionRows] = await db.execute(
       `SELECT 
         t.codigo as id,
@@ -28,19 +26,12 @@ router.get('/status', authMiddleware, async (req, res) => {
     );
 
     if (transmissionRows.length === 0) {
-      return res.json({
-        success: true,
-        is_live: false,
-        transmission: null
-      });
+      return res.json({ success: true, is_live: false, transmission: null });
     }
 
     const transmission = transmissionRows[0];
-
-    // Buscar estatísticas do Wowza
     const stats = await wowzaService.getStreamStats(transmission.wowza_stream_id);
 
-    // Buscar plataformas conectadas
     const [platformRows] = await db.execute(
       `SELECT 
         tp.status,
@@ -63,13 +54,13 @@ router.get('/status', authMiddleware, async (req, res) => {
           viewers: stats.viewers,
           bitrate: stats.bitrate,
           uptime: stats.uptime,
-          isActive: stats.isActive
+          isActive: stats.isActive,
         },
         platforms: platformRows.map(p => ({
           user_platform: {
             platform: {
               nome: p.nome,
-              codigo: p.codigo
+              codigo: p.codigo,
             }
           },
           status: p.status
@@ -82,7 +73,7 @@ router.get('/status', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/streaming/start - Inicia transmissão
+// --- ROTA POST /start ---
 router.post('/start', authMiddleware, async (req, res) => {
   try {
     const {
@@ -90,30 +81,23 @@ router.post('/start', authMiddleware, async (req, res) => {
       descricao,
       playlist_id,
       platform_ids = [],
-      id_transmission_settings,
       settings = {}
     } = req.body;
 
     const userId = req.user.id;
 
     if (!titulo || !playlist_id) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Título e playlist são obrigatórios' 
-      });
+      return res.status(400).json({ success: false, error: 'Título e playlist são obrigatórios' });
     }
 
-    // Verificar se já há transmissão ativa
+    // Verificar se já existe transmissão ativa
     const [activeTransmission] = await db.execute(
       'SELECT codigo FROM transmissoes WHERE codigo_stm = ? AND status = "ativa"',
       [userId]
     );
 
     if (activeTransmission.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Já existe uma transmissão ativa'
-      });
+      return res.status(400).json({ success: false, error: 'Já existe uma transmissão ativa' });
     }
 
     // Buscar vídeos da playlist
@@ -126,26 +110,24 @@ router.post('/start', authMiddleware, async (req, res) => {
     );
 
     if (playlistVideos.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Playlist não possui vídeos'
-      });
+      return res.status(400).json({ success: false, error: 'Playlist não possui vídeos' });
     }
 
-    // Buscar plataformas selecionadas
-    const platforms = [];
-    if (platform_ids.length > 0) {
+    // Buscar plataformas do usuário selecionadas
+    let platforms = [];
+    if (platform_ids.length) {
+      const placeholders = platform_ids.map(() => '?').join(',');
       const [platformRows] = await db.execute(
         `SELECT up.*, p.nome, p.codigo, p.rtmp_base_url
          FROM user_platforms up
          JOIN plataformas p ON up.platform_id = p.codigo
-         WHERE up.codigo IN (${platform_ids.map(() => '?').join(',')}) AND up.codigo_stm = ?`,
+         WHERE up.codigo IN (${placeholders}) AND up.codigo_stm = ?`,
         [...platform_ids, userId]
       );
-      platforms.push(...platformRows);
+      platforms = platformRows;
     }
 
-    // Gerar ID único para o stream
+    // Gerar streamId único
     const streamId = `stream_${userId}_${Date.now()}`;
 
     // Iniciar stream no Wowza
@@ -162,31 +144,21 @@ router.post('/start', authMiddleware, async (req, res) => {
     });
 
     if (!wowzaResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: wowzaResult.error || 'Erro ao iniciar stream no Wowza'
-      });
+      return res.status(500).json({ success: false, error: wowzaResult.error || 'Erro ao iniciar stream no Wowza' });
     }
 
-    // Salvar transmissão no banco
+    // Salvar transmissão
     const [transmissionResult] = await db.execute(
       `INSERT INTO transmissoes (
         codigo_stm, titulo, descricao, codigo_playlist, 
         wowza_stream_id, status, data_inicio, settings
       ) VALUES (?, ?, ?, ?, ?, 'ativa', NOW(), ?)`,
-      [
-        userId, 
-        titulo, 
-        descricao || '', 
-        playlist_id, 
-        streamId,
-        JSON.stringify(settings)
-      ]
+      [userId, titulo, descricao || '', playlist_id, streamId, JSON.stringify(settings)]
     );
 
     const transmissionId = transmissionResult.insertId;
 
-    // Salvar plataformas conectadas
+    // Salvar plataformas conectadas na transmissão
     for (const platformId of platform_ids) {
       await db.execute(
         `INSERT INTO transmissoes_plataformas (
@@ -205,62 +177,41 @@ router.post('/start', authMiddleware, async (req, res) => {
       },
       wowza_data: wowzaResult.data
     });
-
   } catch (error) {
     console.error('Erro ao iniciar transmissão:', error);
     res.status(500).json({ success: false, error: 'Erro interno do servidor' });
   }
 });
 
-// POST /api/streaming/stop - Para transmissão
+// --- ROTA POST /stop ---
 router.post('/stop', authMiddleware, async (req, res) => {
   try {
     const { transmission_id } = req.body;
     const userId = req.user.id;
 
-    // Buscar transmissão
     const [transmissionRows] = await db.execute(
       'SELECT * FROM transmissoes WHERE codigo = ? AND codigo_stm = ? AND status = "ativa"',
       [transmission_id, userId]
     );
 
     if (transmissionRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Transmissão não encontrada ou já finalizada'
-      });
+      return res.status(404).json({ success: false, error: 'Transmissão não encontrada ou já finalizada' });
     }
 
     const transmission = transmissionRows[0];
-
-    // Parar stream no Wowza
     const wowzaResult = await wowzaService.stopStream(transmission.wowza_stream_id);
 
-    // Atualizar status no banco
-    await db.execute(
-      'UPDATE transmissoes SET status = "finalizada", data_fim = NOW() WHERE codigo = ?',
-      [transmission_id]
-    );
+    await db.execute('UPDATE transmissoes SET status = "finalizada", data_fim = NOW() WHERE codigo = ?', [transmission_id]);
+    await db.execute('UPDATE transmissoes_plataformas SET status = "desconectada" WHERE transmissao_id = ?', [transmission_id]);
 
-    // Atualizar status das plataformas
-    await db.execute(
-      'UPDATE transmissoes_plataformas SET status = "desconectada" WHERE transmissao_id = ?',
-      [transmission_id]
-    );
-
-    res.json({
-      success: true,
-      message: 'Transmissão finalizada com sucesso',
-      wowza_result: wowzaResult
-    });
-
+    res.json({ success: true, message: 'Transmissão finalizada com sucesso', wowza_result: wowzaResult });
   } catch (error) {
     console.error('Erro ao parar transmissão:', error);
     res.status(500).json({ success: false, error: 'Erro interno do servidor' });
   }
 });
 
-// GET /api/streaming/platforms - Lista plataformas disponíveis
+// --- ROTA GET /platforms ---
 router.get('/platforms', authMiddleware, async (req, res) => {
   try {
     const [platforms] = await db.execute(
@@ -269,18 +220,14 @@ router.get('/platforms', authMiddleware, async (req, res) => {
        WHERE ativo = 1
        ORDER BY nome`
     );
-
-    res.json({
-      success: true,
-      platforms
-    });
+    res.json({ success: true, platforms });
   } catch (error) {
     console.error('Erro ao buscar plataformas:', error);
     res.status(500).json({ success: false, error: 'Erro interno do servidor' });
   }
 });
 
-// GET /api/streaming/user-platforms - Lista plataformas do usuário
+// --- ROTA GET /user-platforms ---
 router.get('/user-platforms', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -324,7 +271,7 @@ router.get('/user-platforms', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/streaming/configure-platform - Configura plataforma
+// --- ROTA POST /configure-platform ---
 router.post('/configure-platform', authMiddleware, async (req, res) => {
   try {
     const {
@@ -338,33 +285,20 @@ router.post('/configure-platform', authMiddleware, async (req, res) => {
     const userId = req.user.id;
 
     if (!platform_id || !stream_key) {
-      return res.status(400).json({
-        success: false,
-        error: 'Platform ID e Stream Key são obrigatórios'
-      });
+      return res.status(400).json({ success: false, error: 'Platform ID e Stream Key são obrigatórios' });
     }
 
-    // Verificar se plataforma existe
-    const [platformRows] = await db.execute(
-      'SELECT * FROM plataformas WHERE codigo = ?',
-      [platform_id]
-    );
-
+    const [platformRows] = await db.execute('SELECT * FROM plataformas WHERE codigo = ?', [platform_id]);
     if (platformRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Plataforma não encontrada'
-      });
+      return res.status(404).json({ success: false, error: 'Plataforma não encontrada' });
     }
 
-    // Verificar se usuário já tem esta plataforma configurada
     const [existingRows] = await db.execute(
       'SELECT codigo FROM user_platforms WHERE codigo_stm = ? AND platform_id = ?',
       [userId, platform_id]
     );
 
     if (existingRows.length > 0) {
-      // Atualizar configuração existente
       await db.execute(
         `UPDATE user_platforms SET 
          stream_key = ?, rtmp_url = ?, titulo_padrao = ?, descricao_padrao = ?, ativo = 1
@@ -372,7 +306,6 @@ router.post('/configure-platform', authMiddleware, async (req, res) => {
         [stream_key, rtmp_url || '', titulo_padrao || '', descricao_padrao || '', userId, platform_id]
       );
     } else {
-      // Criar nova configuração
       await db.execute(
         `INSERT INTO user_platforms (
           codigo_stm, platform_id, stream_key, rtmp_url, 
@@ -382,18 +315,14 @@ router.post('/configure-platform', authMiddleware, async (req, res) => {
       );
     }
 
-    res.json({
-      success: true,
-      message: 'Plataforma configurada com sucesso'
-    });
-
+    res.json({ success: true, message: 'Plataforma configurada com sucesso' });
   } catch (error) {
     console.error('Erro ao configurar plataforma:', error);
     res.status(500).json({ success: false, error: 'Erro interno do servidor' });
   }
 });
 
-// DELETE /api/streaming/user-platforms/:id - Remove plataforma
+// --- ROTA DELETE /user-platforms/:id ---
 router.delete('/user-platforms/:id', authMiddleware, async (req, res) => {
   try {
     const platformId = req.params.id;
@@ -405,17 +334,10 @@ router.delete('/user-platforms/:id', authMiddleware, async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Plataforma não encontrada'
-      });
+      return res.status(404).json({ success: false, error: 'Plataforma não encontrada' });
     }
 
-    res.json({
-      success: true,
-      message: 'Plataforma removida com sucesso'
-    });
-
+    res.json({ success: true, message: 'Plataforma removida com sucesso' });
   } catch (error) {
     console.error('Erro ao remover plataforma:', error);
     res.status(500).json({ success: false, error: 'Erro interno do servidor' });

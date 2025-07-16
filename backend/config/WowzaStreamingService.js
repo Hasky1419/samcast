@@ -1,6 +1,6 @@
-import DigestFetch from 'digest-fetch';
+const DigestFetch = require('digest-fetch');
 
-export class WowzaStreamingService {
+class WowzaStreamingService {
     constructor() {
         this.wowzaHost = process.env.WOWZA_HOST || '51.222.156.223';
         this.wowzaPassword = process.env.WOWZA_PASSWORD || 'FK38Ca2SuE6jvJXed97VMn';
@@ -332,3 +332,5 @@ export class WowzaStreamingService {
         }
     }
 }
+
+module.exports = WowzaStreamingService;
