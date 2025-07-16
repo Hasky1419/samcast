@@ -15,7 +15,7 @@ router.get('/', authMiddleware, async (req, res) => {
         porta_ssh,
         status,
         limite_streamings,
-        load,
+        \`load\`,
         tipo
        FROM servidores 
        WHERE status = 'on' AND exibir = 'sim'
@@ -42,7 +42,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
         porta_ssh,
         status,
         limite_streamings,
-        load,
+        \`load\`,
         trafego,
         trafego_out,
         tipo,
