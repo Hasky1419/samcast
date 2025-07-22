@@ -38,6 +38,7 @@ interface UniversalVideoPlayerProps {
     url: string;
     position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
     opacity: number;
+    size?: 'small' | 'medium' | 'large';
   };
 }
 
@@ -426,7 +427,11 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
           <img
             src={watermark.url}
             alt="Logo"
-            className="max-w-24 max-h-12 object-contain"
+            className={`object-contain ${
+              watermark.size === 'small' ? 'max-w-16 max-h-8' :
+              watermark.size === 'large' ? 'max-w-32 max-h-16' :
+              'max-w-24 max-h-12'
+            }`}
           />
         </div>
       )}

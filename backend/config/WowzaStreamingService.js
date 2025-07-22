@@ -1,19 +1,64 @@
 const DigestFetch = require('digest-fetch');
+const db = require('./database');
 
 class WowzaStreamingService {
-    constructor() {
-        this.wowzaHost = process.env.WOWZA_HOST || '51.222.156.223';
-        this.wowzaPassword = process.env.WOWZA_PASSWORD || 'FK38Ca2SuE6jvJXed97VMn';
-        this.wowzaUser = process.env.WOWZA_USER || 'admin';
-        this.wowzaPort = process.env.WOWZA_PORT || 6980;
+    constructor(serverId = null) {
+        this.serverId = serverId;
+        this.wowzaHost = null;
+        this.wowzaPassword = null;
+        this.wowzaUser = null;
+        this.wowzaPort = null;
         this.wowzaApplication = process.env.WOWZA_APPLICATION || 'live';
-
-        this.baseUrl = `http://${this.wowzaHost}:${this.wowzaPort}/v2/servers/_defaultServer_/vhosts/_defaultVHost_`;
-        this.client = new DigestFetch(this.wowzaUser, this.wowzaPassword);
+        this.baseUrl = null;
+        this.client = null;
         this.activeStreams = new Map();
     }
 
+    async initializeFromDatabase(userId) {
+        try {
+            // Buscar dados do servidor Wowza baseado no usuário
+            const [streamingRows] = await db.execute(
+                'SELECT codigo_servidor FROM streamings WHERE codigo_cliente = ? LIMIT 1',
+                [userId]
+            );
+
+            let serverId = this.serverId;
+            if (streamingRows.length > 0) {
+                serverId = streamingRows[0].codigo_servidor;
+            }
+
+            // Buscar configurações do servidor Wowza
+            const [serverRows] = await db.execute(
+                'SELECT ip, porta_wowza, usuario_wowza, senha_wowza FROM wowza_servers WHERE codigo = ?',
+                [serverId || 1] // Default para servidor 1 se não encontrar
+            );
+
+            if (serverRows.length > 0) {
+                const server = serverRows[0];
+                this.wowzaHost = server.ip;
+                this.wowzaPort = server.porta_wowza || 6980;
+                this.wowzaUser = server.usuario_wowza || 'admin';
+                this.wowzaPassword = server.senha_wowza;
+
+                this.baseUrl = `http://${this.wowzaHost}:${this.wowzaPort}/v2/servers/_defaultServer_/vhosts/_defaultVHost_`;
+                this.client = new DigestFetch(this.wowzaUser, this.wowzaPassword);
+                
+                return true;
+            } else {
+                console.error('Servidor Wowza não encontrado no banco de dados');
+                return false;
+            }
+        } catch (error) {
+            console.error('Erro ao inicializar configurações do Wowza:', error);
+            return false;
+        }
+    }
+
     async makeWowzaRequest(endpoint, method = 'GET', data = null) {
+        if (!this.client || !this.baseUrl) {
+            throw new Error('Serviço Wowza não inicializado. Chame initializeFromDatabase() primeiro.');
+        }
+
         try {
             const url = `${this.baseUrl}${endpoint}`;
             const options = {

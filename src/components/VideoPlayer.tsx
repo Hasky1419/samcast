@@ -43,11 +43,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ playlistVideo, onVideoEnd }) 
         uptime: streamData.uptime,
         quality: '1080p'
       } : undefined}
-      watermark={{
-        url: '/logo.png',
-        position: 'top-right',
-        opacity: 80
-      }}
       className="w-full"
     />
   );

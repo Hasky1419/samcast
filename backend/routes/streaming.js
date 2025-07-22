@@ -1,14 +1,24 @@
 const express = require('express');
 const db = require('../config/database');
 const authMiddleware = require('../middlewares/authMiddleware');
-const WowzaStreamingService = require('../config/WowzaStreamingService'); // ajuste aqui se for CommonJS
+const WowzaStreamingService = require('../config/WowzaStreamingService');
 const router = express.Router();
-const wowzaService = new WowzaStreamingService();
 
 // --- ROTA GET /status ---
 router.get('/status', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Inicializar serviço Wowza com dados do usuário
+    const wowzaService = new WowzaStreamingService();
+    const initialized = await wowzaService.initializeFromDatabase(userId);
+    
+    if (!initialized) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro ao conectar com servidor de streaming' 
+      });
+    }
 
     const [transmissionRows] = await db.execute(
       `SELECT 
@@ -113,6 +123,17 @@ router.post('/start', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Playlist não possui vídeos' });
     }
 
+    // Inicializar serviço Wowza com dados do usuário
+    const wowzaService = new WowzaStreamingService();
+    const initialized = await wowzaService.initializeFromDatabase(userId);
+    
+    if (!initialized) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro ao conectar com servidor de streaming' 
+      });
+    }
+
     // Buscar plataformas do usuário selecionadas
     let platforms = [];
     if (platform_ids.length) {
@@ -188,6 +209,17 @@ router.post('/stop', authMiddleware, async (req, res) => {
   try {
     const { transmission_id } = req.body;
     const userId = req.user.id;
+
+    // Inicializar serviço Wowza
+    const wowzaService = new WowzaStreamingService();
+    const initialized = await wowzaService.initializeFromDatabase(userId);
+    
+    if (!initialized) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro ao conectar com servidor de streaming' 
+      });
+    }
 
     const [transmissionRows] = await db.execute(
       'SELECT * FROM transmissoes WHERE codigo = ? AND codigo_stm = ? AND status = "ativa"',
