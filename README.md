@@ -38,11 +38,6 @@ Este projeto é um sistema completo de gerenciamento de streaming com integraç�
 - Gerenciamento de streams
 - Estatísticas em tempo real
 
-### ✅ Integração WHMCS
-- Webhook para criação automática de contas
-- Sincronização de status (ativo/suspenso/terminado)
-- Configuração baseada em produtos WHMCS
-
 ## 🛠️ Configuração
 
 ### Banco de Dados MySQL
@@ -151,7 +146,6 @@ npm run dev:backend   # Backend na porta 3001
 - **Frontend:** http://localhost:3000
 - **Backend API:** http://localhost:3001/api
 - **Health Check:** http://localhost:3001/api/health
-- **WHMCS Webhook:** http://localhost:3001/api/whmcs/webhook
 
 ## 🔗 Integração WHMCS
 

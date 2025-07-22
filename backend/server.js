@@ -18,7 +18,6 @@
   const logosRoutes = require('./routes/logos');
   const transmissionSettingsRoutes = require('./routes/transmission-settings');
   const ftpRoutes = require('./routes/ftp');
-  const whmcsRoutes = require('./routes/whmcs');
   const serversRoutes = require('./routes/servers');
 
   const app = express();
@@ -31,12 +30,6 @@
 
   // Servir arquivos estáticos do Wowza
   app.use('/content', express.static('/usr/local/WowzaStreamingEngine/content'));
-
-  // Rotas administrativas
-  app.use('/api/admin/auth', require('./routes/admin/auth'));
-  app.use('/api/admin/users', require('./routes/admin/users'));
-  app.use('/api/admin/dashboard', require('./routes/admin/dashboard'));
-  app.use('/api/admin/system', require('./routes/admin/system'));
 
   // Rotas da API
   app.use('/api/auth', authRoutes);
@@ -52,7 +45,6 @@
   app.use('/api/logos', logosRoutes);
   app.use('/api/transmission-settings', transmissionSettingsRoutes);
   app.use('/api/ftp', ftpRoutes);
-  app.use('/api/whmcs', whmcsRoutes);
   app.use('/api/servers', serversRoutes);
 
   // Rota de teste
@@ -114,7 +106,6 @@
         console.log(`🚀 Servidor rodando na porta ${PORT}`);
         console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
         console.log(`🔧 API test: http://localhost:${PORT}/api/test`);
-        console.log(`🎯 WHMCS webhook: http://localhost:${PORT}/api/whmcs/webhook`);
       });
     } catch (error) {
       console.error('❌ Erro ao iniciar servidor:', error);

@@ -2,11 +2,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Admin Pages
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminUsers from './pages/admin/AdminUsers';
-
 // Auth Pages
 import Login from './pages/auth/Login';
 import ForgotPassword from './pages/auth/ForgotPassword';
@@ -50,12 +45,6 @@ function App() {
       <AuthProvider>
         <StreamProvider>
           <Routes>
-            {/* Admin Routes */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/*" element={<Navigate to="/admin/dashboard" />} />
-
             {/* Auth Routes */}
             <Route path="/" element={<AuthLayout />}>
               <Route index element={<RedirectToProperPlace />} />
